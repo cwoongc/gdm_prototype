@@ -1,0 +1,360 @@
+//apply after java plugin
+
+
+
+import org.gradle.api.internal.tasks.options.Option;
+
+
+
+class GenerateDomainMoudle extends DefaultTask {
+
+	@Input
+	String domainModuleRoot;
+
+	@Input
+	String baseException
+
+	@Input
+	String exceptionImports
+
+	@Option(
+			option = "dir",
+			description = "The domain module directory to make the default role directories in. (Mandatory)",
+			order = 0
+	)
+	String dir
+
+	@Option(
+			option = "class",
+			description = "Generate default role classes and mapper files if this option set 'true'. '--dir' option value will be used to make the files's prefix.  '_' will turn the next character into uppercase. (Optional)",
+			order = 1
+	)
+	String clz = false.toString()
+
+	boolean genClasses = false
+
+	@Option(
+			option = "prefix",
+			description = "Files prefix to use. If provided, default role classes and mapper files will be automatically generated regardless of whether the '--class' option suppliance. (Optional)",
+			order = 2
+	)
+
+	String prefix
+	String uPrefix
+	String lPrefix
+	String cPrefix
+	boolean yesPrefix = false
+
+	String domainModuleFullName // '.'으로 구분된 생성된 도메인 패키지 canonical name
+	String rootSrcDir
+	String rootResourcesDir
+
+
+
+	GenerateDomainMoudle() {
+
+		description = "Provides domain module oriented development environments." //"Generate role module directories into the domain dir."
+	}
+
+	@TaskAction
+	void generate() {
+
+		validateOptions()
+
+		generatePrefix()
+
+		generateDirs()
+
+		copyFiles()
+
+
+	} //generate end
+
+
+	void validateOptions() {
+
+		rootSrcDir = "${project.sourceSets.main.java.srcDirs[0]}/${domainModuleRoot}"
+		rootResourcesDir = "${project.sourceSets.main.resources.srcDirs[0]}/${domainModuleRoot}"
+		println "dir: ${dir}"
+		println "domainModuleRoot: ${domainModuleRoot}"
+		println "rootSrcDir: ${rootSrcDir}"
+		println "rootResourcesDir: ${rootResourcesDir}"
+		if(clz != null && clz.toString().toLowerCase().equals("true")) {
+			this.setGenClasses(true);
+		}
+		println "class: ${genClasses.toString()}"
+
+		if(!(prefix == null) && !(prefix.isEmpty())) {
+
+			if(prefix.length() < 2) throw new GradleException("the prefix's length is too short. It must be more than 2.")
+
+//			println("prefix.length > 2")
+
+			this.setYesPrefix(true);
+		}
+//		println "prefix: ${prefix}"
+
+		if(dir == null || dir == "") {
+			String msg = "'--dir' option must be provided."
+			throwException(msg);
+		} else if(!new File(rootSrcDir).exists() || !new File(rootSrcDir).isDirectory()) {
+			String msg = "'domainModuleRoot' must be exist directory."
+			throwException(msg);
+		} else if(new File("${rootSrcDir}/${dir}").exists()) {
+			String msg = "the dir '${dir}' already exists"
+			throwException(msg);
+		}
+	}
+
+	void generatePrefix() {
+
+//		println(this.yesPrefix);
+//		println(this.genClasses);
+
+		if(this.yesPrefix) { // 직접 명세된 prefix 사용
+
+			println "\n*** '--prefix' option is supplied. User specified prefix will be used... ***"
+
+
+			//첫 글자만 대문자화
+			this.prefix = this.prefix.getAt(0).toUpperCase() + this.prefix.substring(1)
+			this.uPrefix = this.prefix;
+			this.lPrefix = this.prefix.getAt(0).toLowerCase() + this.prefix.substring(1)
+			this.cPrefix = this.uPrefix.toUpperCase()
+
+		} else {
+			if(genClasses) {
+
+				println "\n*** The '--class' option is supplied. The prefix will be made using '--dir' option value... ***"
+
+				// dir명을 활용하여 prefix 제작
+
+				prefix = dir;
+
+				List<Integer> indexes = prefix.findIndexValues {
+					it == '_'
+				}
+
+				indexes = indexes.reverse();
+
+				indexes.each {
+					if (it + 1 > prefix.length()) { // '_' 가 마지막이었다 > 삭제
+						prefix = prefix.substring(0, (int)it)
+
+					} else { // '_' 는 삭제 다음은 대문자
+						prefix = prefix.substring(0, (int)it) + prefix.getAt((int)it + 1).toUpperCase() + prefix.substring((int)it + 2, prefix.length())
+					}
+				}
+
+				prefix = prefix.getAt(0).toUpperCase() + prefix.substring(1)
+				uPrefix = prefix
+				lPrefix = prefix.getAt(0).toLowerCase() + prefix.substring(1)
+				cPrefix = uPrefix.toUpperCase()
+
+			}
+		}
+//		println "uPrefix: ${this.uPrefix}"
+//		println "lPrefix: ${this.lPrefix}"
+//		println "cPrefix: ${this.cPrefix}"
+		println "prefix: ${prefix}\n"
+
+	}
+
+
+	void generateDirs() {
+
+		println "*** Start the module's directories generation... ***"
+
+		String targetModuleSrcPath = "${rootSrcDir}/${dir}";
+		File targetModuleSrcDir = new File(targetModuleSrcPath)
+		if(targetModuleSrcDir.mkdir()) {
+			println "${targetModuleSrcPath} is generated!!"
+
+			new File("${targetModuleSrcPath}/code").mkdir();
+			println "${targetModuleSrcPath}/code is generated!!"
+
+			new File("${targetModuleSrcPath}/entity").mkdir();
+			println "${targetModuleSrcPath}/entity is generated!!"
+
+			new File("${targetModuleSrcPath}/exception").mkdir();
+			println "${targetModuleSrcPath}/exception is generated!!"
+
+			new File("${targetModuleSrcPath}/mapper").mkdir();
+			println "${targetModuleSrcPath}/mapper is generated!!"
+
+			new File("${targetModuleSrcPath}/message").mkdir();
+			println "${targetModuleSrcPath}/message is generated!!"
+
+			new File("${targetModuleSrcPath}/service").mkdir();
+			println "${targetModuleSrcPath}/service is generated!!"
+
+			new File("${targetModuleSrcPath}/validate").mkdir();
+			println "${targetModuleSrcPath}/validate is generated!!"
+
+			new File("${targetModuleSrcPath}/vo").mkdir();
+			println "${targetModuleSrcPath}/vo is generated!!"
+
+			println "the role module source directories are generated!!\n"
+		} else {
+			String msg = "${rootSrcDir}/${dir} generation failed!!"
+			throwException(msg)
+		}
+
+		String targetModuleResourcesPath = "${rootResourcesDir}/${dir}"
+
+		File targetModuleResourcesDir = new File(targetModuleResourcesPath);
+		if(targetModuleResourcesDir.mkdir()) {
+			println "${targetModuleResourcesPath} is generated!!"
+
+			new File("${targetModuleResourcesPath}/mapper").mkdir();
+			println "${targetModuleResourcesPath}/mapper is generated!!"
+
+			println "the role module resources directories are generated!!\n"
+		} else {
+			String msg = "${targetModuleResourcesPath} generation failed!!"
+			throwException(msg)
+		}
+
+		setDomainModuleFullName(
+				domainModuleRoot.replace('/','.') + '.' + dir
+		)
+
+	}
+
+
+	void copyFiles() {
+
+		if (yesPrefix || genClasses) {
+
+			println "\n*** Start class stub generation... ***\n"
+
+			copyFile('example_code');
+			copyFile('example_entity');
+			copyFile('mapper_interface');
+			copyFile('mapper_xml');
+			copyFile('service');
+			copyFile('service_exception');
+			copyFile('service_exception_message');
+			copyFile('validate');
+			copyFile('validate_exception');
+			copyFile('validate_exception_message');
+
+		}
+
+	}
+
+
+	void copyFile(String filename) {
+
+
+		String roleDir = ""
+		String suffix = ""
+		boolean resourceFile = false;
+
+		switch(filename) {
+			case "example_code":
+				roleDir = "code"
+				suffix = "ExampleCd.java"
+				break;
+			case "service":
+				roleDir = "service"
+				suffix = "ServiceImpl.java"
+				break;
+			case "example_entity":
+				roleDir = "entity"
+				suffix = "ExampleEntity.java"
+				break;
+			case "mapper_interface":
+				roleDir = "mapper"
+				suffix = "Mapper.java"
+				break;
+			case "service_exception":
+				roleDir = "exception"
+				suffix = "ServiceException.java"
+				break;
+			case "service_exception_message":
+				roleDir = "message"
+				suffix = "ServiceExceptionMessage.java"
+				break;
+			case "validate":
+				roleDir = "validate"
+				suffix = "Validate.java"
+				break;
+			case "validate_exception":
+				roleDir = "exception"
+				suffix = "ValidateException.java"
+				break;
+			case "validate_exception_message":
+				roleDir = "message"
+				suffix = "ValidateExceptionMessage.java"
+				break;
+			case "mapper_xml":
+				roleDir = "mapper"
+				suffix = "Mapper.xml"
+				resourceFile = true
+				break;
+
+			default:
+				break;
+		}
+
+//		println "roleDir: ${roleDir}"
+//		println "suffix: ${suffix}"
+//		println "filename: ${filename}"
+
+		File source = new File("${project.rootDir}/.gdm/${filename}")
+		File dest = null;
+
+		if(resourceFile) {
+			dest = new File("${rootResourcesDir}/${dir}/${roleDir}/${lPrefix}${suffix}")
+		} else {
+			dest = new File("${rootSrcDir}/${dir}/${roleDir}/${uPrefix}${suffix}")
+		}
+
+
+		dest.withWriter { w ->
+			source.eachLine { line ->
+				String l = line
+				l = l.replaceAll("@domainModuleFullName@","${domainModuleFullName}");
+
+				l = l.replaceAll("@uPrefix@","${uPrefix}")
+
+				l = l.replaceAll("@lPrefix@","${lPrefix}")
+
+				l = l.replaceAll("@cPrefix@","${cPrefix}")
+
+				l = l.replaceAll("@exceptionImports@","${exceptionImports}")
+
+				l = l.replaceAll("@baseException@", "${baseException}")
+
+
+				w << l + System.getProperty("line.separator")
+			}
+		}
+
+		println dest.getAbsolutePath() + " is generated!!!"
+	}
+
+
+	void throwException(String msg) {
+		println msg
+		throw new GradleException(msg)
+	}
+
+}
+
+
+
+
+
+
+
+
+task gdm(type: GenerateDomainMoudle) {
+	domainModuleRoot = 'com/elevenst/terroir/product/registration'
+	baseException = 'TerroirException'
+	exceptionImports = '''import com.elevenst.exception.ExceptionEnumTypes;
+import com.elevenst.exception.TerroirException;'''
+}
+
+
